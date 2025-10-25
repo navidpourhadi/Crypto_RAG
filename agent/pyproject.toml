@@ -1,0 +1,23 @@
+[project]
+name = "crypto-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.13.1",
+    "beanie>=2.0.0",
+    "bs4>=0.0.2",
+    "fastapi>=0.120.0",
+    "langchain>=1.0.2",
+    "langchain-google-genai>=3.0.0",
+    "langgraph>=1.0.1",
+    "numpy>=2.3.4",
+    "pandas>=2.3.3",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.11.0",
+    "pymongo>=4.15.3",
+    "qdrant-client>=1.15.1",
+    "structlog>=25.4.0",
+    "uvicorn>=0.38.0",
+]

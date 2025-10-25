@@ -1,0 +1,65 @@
+services:
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: Crypto-agent
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - QDRANT_URL=http://qdrant:6010
+    ports:
+      - "8010:8010"
+    volumes:
+      - ./agent/app:/agent/app
+      - ./agent/.env:/agent/.env
+    command: >
+      uv run uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
+    depends_on:
+      - mongodb
+      - qdrant
+
+  mongodb:
+    image: mongo:latest
+    container_name: Crypto-mongodb
+    ports:
+      - "27019:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: Crypto-qdrant
+    restart: unless-stopped
+    ports:
+      - "6010:6010"  # REST API
+      - "6001:6011"  # gRPC API
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6010
+      - QDRANT__SERVICE__GRPC_PORT=6011
+
+
+  frontend:
+    build:
+      context: ./crypto-rag-frontend
+      dockerfile: Dockerfile
+    container_name: Crypto-Frontend
+    ports:
+      - "3010:3010"
+    volumes:
+      - ./crypto-rag-frontend/app:/app/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NODE_OPTIONS=--max-old-space-size=1024
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  qdrant_data:
+  mongodb_data:
