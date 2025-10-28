@@ -16,6 +16,9 @@ from app.agent.prompts import SYSTEM_PROMPT
 
 from app.agent.tools import news_tools
 from app.core.config import settings
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def supervisor(state) -> dict:
@@ -274,7 +277,7 @@ def news_collector_node(state) -> dict:
     Guidance:
     - If specific cryptocurrencies are mentioned, include them explicitly in `query_text`.
     - Prefer recent/time-sensitive phrasing when the user requests "recent" or "latest".
-    - Use max_results=10 and similarity_threshold=0.7 by default; lower threshold to 0.6 for
+    - Use max_results=5 and similarity_threshold=0.5 by default; lower threshold to 0.3 for
       broader searches if the user asks for general context.
 
     Only produce a tool call (no additional text). The tool will be executed by the system.
@@ -315,14 +318,45 @@ def news_synthesizer_node(state) -> dict:
         state["reasoning_steps"] = []
     if "market_insights" not in state:
         state["market_insights"] = {}
+    if "news_data" not in state:
+        state["news_data"] = []
         
     state["reasoning_steps"].append("News synthesized and relevance scored")
     state["market_insights"]["news_themes"] = []
     state["market_insights"]["key_signals"] = []
     
-    # If no news data was retrieved from the vector DB, synthesize a helpful text-only fallback
+    # Extract news data from tool messages and store in state
+    messages = state.get("messages", [])
     news_data = state.get("news_data", [])
+    
+    # If news_data is empty, try to extract from recent tool messages
     if not news_data:
+        for message in reversed(messages):
+            # Check if this is a tool message with search results
+            if hasattr(message, 'type') and message.type == 'tool':
+                try:
+                    # Extract the tool result content
+                    if hasattr(message, 'content'):
+                        import json
+                        # The tool returns a list of dictionaries with news data
+                        if isinstance(message.content, str):
+                            tool_results = json.loads(message.content)
+                        else:
+                            tool_results = message.content
+                        
+                        if isinstance(tool_results, list):
+                            # Store the retrieved news data in state
+                            news_data = tool_results
+                            state["news_data"] = news_data
+                            state["reasoning_steps"].append(f"Retrieved {len(tool_results)} news articles from vector database")
+                            logger.info(f"Stored {len(tool_results)} news articles in state")
+                        break
+                except Exception as e:
+                    logger.warning(f"Error processing tool results: {e}")
+                    continue
+    
+    # Check if news_data contains error messages or no results
+    if not news_data or (len(news_data) == 1 and news_data[0].get("no_results")):
         # Use an LLM to provide a useful fallback: explain no news was found, offer a general
         # analysis based on the query and suggest next steps for the user.
         llm = ChatGoogleGenerativeAI(
@@ -331,7 +365,9 @@ def news_synthesizer_node(state) -> dict:
             temperature=0.2,
         )
 
-        last_user = state.get("messages", [])[-1].content if state.get("messages") else ""
+        # Get the original user query from messages
+        user_messages = [msg for msg in state.get("messages", []) if hasattr(msg, 'type') and msg.type == 'human']
+        last_user = user_messages[-1].content if user_messages else ""
 
         fallback_prompt = f"""
         You attempted to retrieve relevant news for the user's request but the vector database
@@ -367,12 +403,21 @@ def news_synthesizer_node(state) -> dict:
 
         return {
             "messages": messages,
+            "news_data": state["news_data"],
             "market_insights": state["market_insights"],
             "reasoning_steps": state["reasoning_steps"],
             "next_node": "__end__",
         }
+    
+    # Process the retrieved news data
+    logger.info(f"Processing {len(news_data)} news articles for synthesis")
+    
+    # Store news data in market insights for further analysis
+    state["market_insights"]["processed_news"] = news_data
+    state["reasoning_steps"].append(f"Successfully processed {len(news_data)} news articles for market analysis")
 
     return {
+        "news_data": state["news_data"],
         "market_insights": state["market_insights"],
         "reasoning_steps": state["reasoning_steps"],
     }
@@ -392,12 +437,17 @@ def market_analyzer_node(state) -> dict:
         state["reasoning_steps"] = []
     if "market_insights" not in state:
         state["market_insights"] = {}
+    
+    # Access the news data for analysis
+    news_data = state.get("news_data", [])
+    logger.info(f"Analyzing market impact for {len(news_data)} news articles")
         
     state["reasoning_steps"].append("Market impact analysis completed")
     state["market_insights"]["impact_assessment"] = {}
     state["market_insights"]["sentiment_analysis"] = {}
     
     return {
+        "news_data": state.get("news_data", []),
         "market_insights": state["market_insights"],
         "reasoning_steps": state["reasoning_steps"]
     }
@@ -417,12 +467,17 @@ def pattern_recognizer_node(state) -> dict:
         state["reasoning_steps"] = []
     if "market_insights" not in state:
         state["market_insights"] = {}
+    
+    # Access the news data for pattern recognition
+    news_data = state.get("news_data", [])
+    logger.info(f"Recognizing patterns in {len(news_data)} news articles")
         
     state["reasoning_steps"].append("Pattern recognition and trend analysis completed")
     state["market_insights"]["identified_patterns"] = []
     state["market_insights"]["trend_analysis"] = {}
     
     return {
+        "news_data": state.get("news_data", []),
         "market_insights": state["market_insights"],
         "reasoning_steps": state["reasoning_steps"]
     }
@@ -443,6 +498,10 @@ def insight_generator_node(state) -> dict:
         google_api_key=settings.GOOGLE_API_KEY,
         temperature=0.3,
     )
+    
+    # Access the news data for final insight generation
+    news_data = state.get("news_data", [])
+    logger.info(f"Generating insights based on {len(news_data)} news articles")
     
     insight_prompt = f"""
     Generate comprehensive cryptocurrency market analysis based on:
@@ -490,10 +549,24 @@ def should_continue_news_collection(state) -> Literal["news_tools", "news_synthe
 
 
 def should_continue_synthesis(state) -> Literal["market_analyzer", "__end__"]:
-    """Determine if synthesis should continue to market analysis."""
-    news_themes = state.get("market_insights", {}).get("news_themes", [])
-    if news_themes:
+    """Determine if synthesis should continue to market analysis.
+
+    Previous logic relied on `market_insights.news_themes` which was often left
+    empty, causing the workflow to prematurely end and return raw tool results.
+
+    Use presence of retrieved news (either in `news_data` or
+    `market_insights.processed_news`) as the trigger to continue to
+    `market_analyzer`. This is more robust and matches the intended flow.
+    """
+    # Prefer explicit `news_data` stored on the state
+    news = state.get("news_data")
+    if not news:
+        # Fallback to processed news stored in market_insights by the synthesizer
+        news = state.get("market_insights", {}).get("processed_news", [])
+
+    if news and len(news) > 0:
         return "market_analyzer"
+
     return "__end__"
 
 
