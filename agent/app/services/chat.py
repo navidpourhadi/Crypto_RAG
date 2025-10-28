@@ -12,13 +12,14 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 class ChatService:
     """
     Service class for handling chat-related operations.
     """
 
     @staticmethod
-    async def create_chat(user_id: str, title: str = None) -> Chat:
+    async def create_chat(title: str = None) -> Chat:
         if title:
             chat = Chat(title=title)
         else:
@@ -39,7 +40,7 @@ class ChatService:
         return chat
 
     @staticmethod
-    async def delete_chat(user_id: str, chat_id: UUID) -> Chat | None:
+    async def delete_chat(chat_id: UUID) -> Chat | None:
         chat = await Chat.get(chat_id)
         if not chat:
             logger.error(f"Chat with ID {chat_id} not found.")
@@ -50,10 +51,12 @@ class ChatService:
     async def get_chat(chat_id: UUID) -> Chat | None:
         return await Chat.get(chat_id)
 
+    @staticmethod
+    async def get_all_chats() -> List[Chat]:
+        return await Chat.find().to_list()
 
     @staticmethod
     async def chat_with_agent(
-        user_id: str,
         user_message: str,
         chat_id: UUID | None = None,
     ) -> Dict:
@@ -65,7 +68,6 @@ class ChatService:
         if not chat_id:
             new_chat = True
             chat = await ChatService.create_chat(
-                user_id=user_id,
                 title=user_message[:25],
             )
             chat_id = chat.id
@@ -79,7 +81,6 @@ class ChatService:
         agent_response = await agent.generate_response(
             user_input=user_message,
             thread_id=chat_id,
-            user_id=user_id,
         )
         if not new_chat:
             await ChatService.update_chat(

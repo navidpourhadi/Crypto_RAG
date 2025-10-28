@@ -12,9 +12,6 @@ from qdrant_client.models import (
 from app.core.config import settings
 from app.core.vectordb import VectorDatabase
 
-from app.services.chunk import ChunkService
-from app.services.embed import EmbedService
-
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)

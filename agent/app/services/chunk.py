@@ -6,7 +6,7 @@ import aiohttp
 from app.core.config import settings
 from app.utils.logger import get_logger
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = get_logger(__name__)
 

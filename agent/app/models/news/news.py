@@ -19,7 +19,7 @@ class News(Document):
     created_at: datetime = Field(
         default_factory=datetime.now, description="Creation timestamp"
     )
-    VDB_added_at: datetime = Field(
+    VDB_added_at: datetime | None = Field(
         ..., description="Timestamp of adding to the vector db"
     )
 

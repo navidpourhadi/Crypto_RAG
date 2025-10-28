@@ -24,11 +24,19 @@ class NewsService:
         return news
 
     @staticmethod
-    async def update_news(news_id: str, update_data: UpdateNews) -> News | None:
+    async def update_news(news_id: str, update_data: UpdateNews | dict) -> News | None:
+        """
+        Update a news document. Accepts either an UpdateNews model or a plain dict.
+        This makes it convenient for callers that already have a dict of updates.
+        """
         news = await News.find_one(News.id == news_id)
         if news:
-            # Only update fields that are not None
-            update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
+            # Normalize update_data into a dict whether caller passed a model or dict
+            if isinstance(update_data, dict):
+                update_dict = {k: v for k, v in update_data.items() if v is not None}
+            else:
+                update_dict = update_data.model_dump(exclude_unset=True, exclude_none=True)
+
             for k, v in update_dict.items():
                 setattr(news, k, v)
             await news.save()

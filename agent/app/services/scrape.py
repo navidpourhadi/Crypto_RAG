@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 import aiohttp
@@ -36,6 +36,15 @@ class ScrapeService:
         latest_news_time = await NewsService.get_latest_news()
         if len(latest_news_time) > 0:
             latest_news_time = latest_news_time[0].time
+            # Normalize latest_news_time to timezone-aware (assume UTC if naive)
+            try:
+                if latest_news_time is not None and latest_news_time.tzinfo is None:
+                    latest_news_time = latest_news_time.replace(tzinfo=timezone.utc)
+            except Exception:
+                # If for any reason normalization fails, fallback to None
+                logger.debug("Failed to normalize latest_news_time timezone, treating as None")
+                latest_news_time = None
+
             logger.info(f"Latest news in database: {latest_news_time}")
         else:
             latest_news_time = None
@@ -80,10 +89,7 @@ class ScrapeService:
                     # Extract news items
                     news_items = []
                     for key in data_dict:
-                        if "blocks" in data_dict[key] and data_dict[key]["blocks"]:
-                            for block in data_dict[key]["blocks"]:
-                                if "news" in block and "items" in block["news"]:
-                                    news_items.extend(block["news"]["items"])
+                        news_items = data_dict[key]["data"]["news"]["data"]["items"]
 
                     if not news_items:
                         logger.info("No news items found on the page.")
@@ -118,6 +124,10 @@ class ScrapeService:
                                 news_time = datetime.fromisoformat(
                                     result["time"].replace("Z", "+00:00")
                                 )
+                                # Ensure parsed time is timezone-aware; assume UTC if missing
+                                if news_time.tzinfo is None:
+                                    news_time = news_time.replace(tzinfo=timezone.utc)
+
                                 result["time"] = news_time  # Store as datetime object
                                 scraped_news.append(result)
                             except (ValueError, TypeError) as e:
@@ -255,7 +265,7 @@ class ScrapeService:
                     "id": news_item["id"],
                     "title": news_item["title"],
                     "time": time,
-                    "source": news_item["source"],
+                    "source": news_item["provider"]["name"],
                     "description": description,
                 }
 

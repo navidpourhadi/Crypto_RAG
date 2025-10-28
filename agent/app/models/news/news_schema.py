@@ -24,3 +24,21 @@ class UpdateNews(BaseModel):
     VDB_added_at: datetime | None = Field(
         ..., description="Timestamp of adding to the vector db"
     )
+
+
+class NewsResponse(BaseModel):
+    """
+    Schema for the response of a News.
+    """
+
+    id: str = Field(..., description="Unique identifier")
+    title: str = Field(..., description="Title of the news")
+    time: datetime = Field(..., description="Time of publication")
+    source: str = Field(..., description="Source of the news")
+    description: str = Field(..., description="Description of the news")
+    created_at: datetime = Field(
+        default_factory=datetime.now, description="Creation timestamp"
+    )
+    VDB_added_at: datetime | None = Field(
+        ..., description="Timestamp of adding to the vector db"
+    )

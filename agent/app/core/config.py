@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = Field(default=1000)
     CHUNK_OVERLAP: int = Field(default=100)
 
+    # Background RAG processing settings
+    RAG_PROCESSING_INTERVAL_HOURS: int = Field(default=1)
+    RAG_RUN_ON_STARTUP: bool = Field(default=True)
+    RAG_MAX_CONCURRENT_PROCESSING: int = Field(default=3)
+
     model_config = SettingsConfigDict(
         # Define the configuration for the settings model
         env_file=(".env", ".env.{ENV}"),
