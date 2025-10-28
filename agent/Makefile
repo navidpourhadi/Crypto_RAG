@@ -6,4 +6,4 @@ clean:
 	@echo "🧹 Cleaned __pycache__ and .pyc files"
 
 run:
-	uv run uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
+	uv run uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
